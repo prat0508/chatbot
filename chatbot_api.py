@@ -1,8 +1,77 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+import os
+from werkzeug.utils import secure_filename
+import cv2
+import numpy as np
+from PIL import Image
+import io
 
 app = Flask(__name__)
 CORS(app)
+
+# Configure upload folder
+UPLOAD_FOLDER = 'uploads'
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+# Create uploads directory if it doesn't exist
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def analyze_crop_image(image_path):
+    # Read the image
+    img = cv2.imread(image_path)
+    
+    # Convert to HSV color space
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    
+    # Simple analysis based on color
+    # These are example thresholds - you would need to adjust these
+    green_lower = np.array([25, 40, 40])
+    green_upper = np.array([85, 255, 255])
+    
+    # Create mask for green color
+    mask = cv2.inRange(hsv, green_lower, green_upper)
+    
+    # Calculate percentage of green
+    green_percentage = (np.sum(mask > 0) / (mask.shape[0] * mask.shape[1])) * 100
+    
+    # Basic analysis
+    if green_percentage > 60:
+        health = "healthy"
+    elif green_percentage > 30:
+        health = "moderate health concerns"
+    else:
+        health = "potential health issues"
+    
+    # Example response - in a real system, you'd want more sophisticated analysis
+    response = {
+        "crop_health": health,
+        "green_coverage": f"{green_percentage:.1f}%",
+        "recommendations": []
+    }
+    
+    if health == "healthy":
+        response["recommendations"].append("Crop appears healthy. Continue current care routine.")
+    elif health == "moderate health concerns":
+        response["recommendations"].extend([
+            "Consider increasing irrigation",
+            "Check for pest infestation",
+            "Soil nutrient test recommended"
+        ])
+    else:
+        response["recommendations"].extend([
+            "Immediate attention required",
+            "Check for disease symptoms",
+            "Consider consulting an agricultural expert",
+            "Soil and plant tissue testing recommended"
+        ])
+    
+    return response
 
 user_sessions = {}
 
@@ -137,6 +206,38 @@ def chat():
         return jsonify({"response": response})
     else:
         return jsonify({"response": [response]})
+
+@app.route('/upload-image', methods=['POST'])
+def upload_image():
+    if 'image' not in request.files:
+        return jsonify({"error": "No image file provided"}), 400
+    
+    file = request.files['image']
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+    
+    if file and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(filepath)
+        
+        # Analyze the image
+        try:
+            analysis_result = analyze_crop_image(filepath)
+            
+            # Clean up - delete the uploaded file after analysis
+            os.remove(filepath)
+            
+            return jsonify({
+                "success": True,
+                "analysis": analysis_result
+            })
+        except Exception as e:
+            if os.path.exists(filepath):
+                os.remove(filepath)
+            return jsonify({"error": f"Error analyzing image: {str(e)}"}), 500
+    
+    return jsonify({"error": "Invalid file type"}), 400
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
