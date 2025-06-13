@@ -3,4 +3,10 @@ flask-cors==3.0.10
 Werkzeug==2.0.3
 opencv-python==4.8.0.74
 numpy==1.24.3
-Pillow==9.5.0 
+Pillow==9.5.0
+torch>=2.0.0
+torchaudio>=2.0.0
+transformers>=4.30.0
+accelerate>=0.20.0
+sentencepiece>=0.1.99
+librosa>=0.10.0

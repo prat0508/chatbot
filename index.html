@@ -36,14 +36,8 @@
         }
 
         @keyframes slideUp {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         .chat-header {
@@ -87,14 +81,8 @@
         }
 
         @keyframes messageSlide {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         .user-message {
@@ -161,6 +149,9 @@
             cursor: pointer;
             margin-right: 8px;
             font-size: 0.9em;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
             transition: all 0.3s ease;
             display: flex;
             align-items: center;
@@ -247,6 +238,44 @@
             transform: translateY(-1px);
         }
 
+        .voice-button {
+            padding: 10px 20px;
+            background: #e91e63;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.95em;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .voice-button:hover {
+            background: #c2185b;
+            transform: translateY(-1px);
+        }
+
+        .voice-button.recording {
+            background: #f44336;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .voice-status {
+            font-size: 0.8em;
+            color: #666;
+            text-align: center;
+            margin-top: 5px;
+            min-height: 20px;
+        }
+
         .analysis-result {
             background: #f1f8e9;
             padding: 15px;
@@ -258,12 +287,8 @@
         }
 
         @keyframes fadeIn {
-            from {
-                opacity: 0;
-            }
-            to {
-                opacity: 1;
-            }
+            from { opacity: 0; }
+            to { opacity: 1; }
         }
 
         .analysis-result h3 {
@@ -324,7 +349,7 @@
 
             .chat-messages {
                 flex: 1;
-                height: 0;
+                height: auto;
             }
 
             .image-upload-container {
@@ -376,11 +401,20 @@
                 </div>
                 <div class="message-input-container">
                     <input type="text" id="messageInput" placeholder="Type your message...">
+                    <button class="voice-button" id="voiceButton" onclick="toggleVoiceRecording()">
+                        <i class="fas fa-microphone"></i>
+                        Voice
+                    </button>
                     <button class="send-button" onclick="sendMessage()">
                         <i class="fas fa-paper-plane"></i>
                         Send
                     </button>
                 </div>
+                <div class="voice-status" id="voiceStatus"></div>
+                <audio id="audioPlayback" controls style="display:none; width:100%; margin-top:8px;"></audio>
+                <button id="sendVoiceButton" class="send-button" style="display:none; margin-top:8px; background:#34a853;" onclick="sendVoiceMessage()">
+                    <i class="fas fa-paper-plane"></i> Send Voice
+                </button>
             </div>
         </div>
     </div>
@@ -388,6 +422,9 @@
     <script>
         let sessionId = Date.now().toString();
         let userName = '';
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let isRecording = false;
 
         // Focus on name input when page loads
         window.onload = function() {
@@ -397,14 +434,9 @@
         function startChat() {
             userName = document.getElementById('nameInput').value.trim();
             if (userName) {
-                // Hide name input container and show chat interface
                 document.getElementById('nameInputContainer').style.display = 'none';
                 document.getElementById('chatInterface').style.display = 'block';
-                
-                // Focus on message input
                 document.getElementById('messageInput').focus();
-                
-                // Send initial message with user's name
                 sendMessage(userName);
             } else {
                 alert('Please enter your name to continue');
@@ -412,19 +444,210 @@
             }
         }
 
-        // Handle Enter key in name input
-        document.getElementById('nameInput').addEventListener('keypress', function(e) {
+        document.getElementById('nameInput').addEventListener('keypress', function(e)
+
+{
             if (e.key === 'Enter') {
                 startChat();
             }
         });
+
+        async function toggleVoiceRecording() {
+            if (isRecording) {
+                stopRecording();
+            } else {
+                await startRecording();
+            }
+        }
+
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' }); // Use WebM for broader compatibility
+                audioChunks = [];
+
+                mediaRecorder.ondataavailable = (event) => {
+                    audioChunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    const audioPlayback = document.getElementById('audioPlayback');
+                    audioPlayback.src = audioUrl;
+                    audioPlayback.style.display = 'block';
+                    document.getElementById('sendVoiceButton').style.display = 'inline-block';
+                    document.getElementById('voiceStatus').textContent = 'Listen to your recording and click Send Voice.';
+                };
+
+                mediaRecorder.start();
+                isRecording = true;
+
+                const voiceButton = document.getElementById('voiceButton');
+                const voiceStatus = document.getElementById('voiceStatus');
+
+                voiceButton.classList.add('recording');
+                voiceButton.innerHTML = '<i class="fas fa-stop"></i> Stop';
+                voiceStatus.textContent = 'Recording... Speak now!';
+            } catch (error) {
+                console.error('Error accessing microphone:', error);
+                document.getElementById('voiceStatus').textContent = 'Error: Could not access microphone';
+            }
+        }
+
+        function stopRecording() {
+            if (mediaRecorder && isRecording) {
+                mediaRecorder.stop();
+                isRecording = false;
+
+                const voiceButton = document.getElementById('voiceButton');
+                const voiceStatus = document.getElementById('voiceStatus');
+
+                voiceButton.classList.remove('recording');
+                voiceButton.innerHTML = '<i class="fas fa-microphone"></i> Voice';
+                voiceStatus.textContent = 'Processing audio...';
+
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+            }
+        }
+
+        async function convertToWav(audioBlob) {
+            return new Promise((resolve, reject) => {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const reader = new FileReader();
+
+                reader.onload = async function() {
+                    const arrayBuffer = reader.result;
+                    try {
+                        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                        const wavBuffer = audioBufferToWav(audioBuffer);
+                        const wavBlob = new Blob([wavBuffer], { type: 'audio/wav' });
+                        resolve(wavBlob);
+                    } catch (error) {
+                        reject(error);
+                    }
+                };
+
+                reader.onerror = () => reject(new Error('Failed to read audio blob'));
+                reader.readAsArrayBuffer(audioBlob);
+            });
+        }
+
+        // Helper function to convert AudioBuffer to WAV
+        function audioBufferToWav(audioBuffer) {
+            const numChannels = audioBuffer.numberOfChannels;
+            const sampleRate = audioBuffer.sampleRate;
+            const format = 1; // PCM
+            const bitDepth = 16;
+            const bytesPerSample = bitDepth / 8;
+            const blockAlign = numChannels * bytesPerSample;
+            const byteRate = sampleRate * blockAlign;
+            const dataSize = audioBuffer.length * blockAlign;
+
+            const buffer = new ArrayBuffer(44 + dataSize);
+            const view = new DataView(buffer);
+
+            // WAV header
+            writeString(view, 0, 'RIFF');
+            view.setUint32(4, 36 + dataSize, true);
+            writeString(view, 8, 'WAVE');
+            writeString(view, 12, 'fmt ');
+            view.setUint32(16, 16, true); // Subchunk1Size
+            view.setUint16(20, format, true);
+            view.setUint16(22, numChannels, true);
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, byteRate, true);
+            view.setUint16(32, blockAlign, true);
+            view.setUint16(34, bitDepth, true);
+            writeString(view, 36, 'data');
+            view.setUint32(40, dataSize, true);
+
+            // Write PCM data
+            let offset = 44;
+            for (let i = 0; i < audioBuffer.length; i++) {
+                for (let channel = 0; channel < numChannels; channel++) {
+                    const sample = Math.max(-1, Math.min(1, audioBuffer.getChannelData(channel)[i]));
+                    view.setInt16(offset, sample * 0x7FFF, true);
+                    offset += 2;
+                }
+            }
+
+            return buffer;
+        }
+
+        function writeString(view, offset, string) {
+            for (let i = 0; i < string.length; i++) {
+                view.setUint8(offset + i, string.charCodeAt(i));
+            }
+        }
+
+        async function sendVoiceMessage() {
+            try {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                const wavBlob = await convertToWav(audioBlob);
+                const reader = new FileReader();
+
+                document.getElementById('voiceStatus').textContent = 'Transcribing audio...';
+
+                reader.onload = async function() {
+                    const audioData = reader.result.split(',')[1]; // Get base64 part
+                    addMessage('[Voice message sent]', true);
+
+                    const response = await fetch('http://localhost:5000/chat', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            audio_data: audioData,
+                            audio_format: 'audio/wav',
+                            session_id: sessionId
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (data.response && data.response.length > 0) {
+                        if (data.response[0].startsWith('Error:')) {
+                            addMessage(data.response[0], false);
+                            document.getElementById('voiceStatus').textContent = 'Transcription failed. Please try again.';
+                        } else {
+                            data.response.forEach(response => {
+                                addMessage(response, false);
+                            });
+                            document.getElementById('voiceStatus').textContent = 'Voice message processed successfully!';
+                        }
+                    } else {
+                        addMessage('Sorry, there was an error processing your voice message.', false);
+                        document.getElementById('voiceStatus').textContent = 'Error processing voice message.';
+                    }
+
+                    setTimeout(() => {
+                        document.getElementById('voiceStatus').textContent = '';
+                        document.getElementById('audioPlayback').style.display = 'none';
+                        document.getElementById('sendVoiceButton').style.display = 'none';
+                        document.getElementById('audioPlayback').src = '';
+                    }, 3000);
+                };
+
+                reader.onerror = () => {
+                    console.error('Error reading audio blob');
+                    document.getElementById('voiceStatus').textContent = 'Error processing audio. Please try again.';
+                };
+
+                reader.readAsDataURL(wavBlob);
+            } catch (error) {
+                console.error('Error sending voice message:', error);
+                document.getElementById('voiceStatus').textContent = 'Error sending audio. Please try again.';
+            }
+        }
 
         function addMessage(message, isUser) {
             const messagesDiv = document.getElementById('chatMessages');
             const messageElement = document.createElement('div');
             messageElement.classList.add('message');
             messageElement.classList.add(isUser ? 'user-message' : 'bot-message');
-            
+
             if (!isUser && message.includes('Analysis Results:')) {
                 const formattedMessage = message.split('\n').map(line => {
                     if (line.trim().startsWith('-')) {
@@ -436,12 +659,11 @@
                     }
                     return '';
                 }).join('');
-                
                 messageElement.innerHTML = `<div class="analysis-result">${formattedMessage}</div>`;
             } else {
                 messageElement.textContent = isUser ? `${userName}: ${message}` : `Bot: ${message}`;
             }
-            
+
             messagesDiv.appendChild(messageElement);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
@@ -450,7 +672,7 @@
             const input = document.getElementById('imageInput');
             const imageNameSpan = document.getElementById('imageName');
             const uploadButton = document.getElementById('uploadButton');
-            
+
             if (input.files && input.files[0]) {
                 const file = input.files[0];
                 imageNameSpan.textContent = file.name;
@@ -464,11 +686,11 @@
         function uploadImage() {
             const input = document.getElementById('imageInput');
             const uploadButton = document.getElementById('uploadButton');
-            
+
             if (input.files && input.files[0]) {
                 const formData = new FormData();
                 formData.append('image', input.files[0]);
-                
+
                 uploadButton.disabled = true;
                 addMessage('Uploading and analyzing image...', true);
 
@@ -484,7 +706,6 @@
                             Analysis Results:
                             - Crop Health: ${analysis.crop_health}
                             - Green Coverage: ${analysis.green_coverage}
-                            
                             Recommendations:
                             ${analysis.recommendations.map(rec => '- ' + rec).join('\n')}
                         `;
@@ -508,7 +729,7 @@
         function sendMessage(message = null) {
             const messageInput = document.getElementById('messageInput');
             const messageToSend = message || messageInput.value.trim();
-            
+
             if (messageToSend) {
                 addMessage(messageToSend, true);
                 messageInput.value = '';
@@ -547,10 +768,9 @@
             }
         });
 
-        // Add loading animation
         window.addEventListener('load', function() {
             document.querySelector('.chat-container').style.opacity = '1';
         });
     </script>
 </body>
-</html> 
+</html>
