@@ -437,16 +437,14 @@
                 document.getElementById('nameInputContainer').style.display = 'none';
                 document.getElementById('chatInterface').style.display = 'block';
                 document.getElementById('messageInput').focus();
-                sendMessage(userName);
+                addMessage("Namaskar! Behtar Zindagi me apka swagat hai", false);
             } else {
                 alert('Please enter your name to continue');
                 document.getElementById('nameInput').focus();
             }
         }
 
-        document.getElementById('nameInput').addEventListener('keypress', function(e)
-
-{
+        document.getElementById('nameInput').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 startChat();
             }
@@ -661,7 +659,7 @@
                 }).join('');
                 messageElement.innerHTML = `<div class="analysis-result">${formattedMessage}</div>`;
             } else {
-                messageElement.textContent = isUser ? `${userName}: ${message}` : `Bot: ${message}`;
+                messageElement.textContent = message;
             }
 
             messagesDiv.appendChild(messageElement);
@@ -735,24 +733,23 @@
                 messageInput.value = '';
                 messageInput.focus();
 
-                fetch('http://localhost:5000/chat', {
+                fetch('http://192.168.0.59:9696/chat', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        message: messageToSend,
-                        session_id: sessionId
+                        user_question: messageToSend,
+                        session_id: sessionId,
+                        product_name: "fogger"
                     })
                 })
                 .then(response => response.json())
                 .then(data => {
-                    if (Array.isArray(data.response)) {
-                        data.response.forEach(response => {
-                            addMessage(response, false);
-                        });
+                    if (data.response) {
+                        addMessage(data.response[0].answer, false);
                     } else {
-                        addMessage(data.response[0], false);
+                        addMessage('Sorry, there was an error processing your request.', false);
                     }
                 })
                 .catch(error => {
