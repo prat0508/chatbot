@@ -1,6 +1,7 @@
 import logging
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+import requests
 from transformers import WhisperProcessor, WhisperForConditionalGeneration, AutoTokenizer, AutoModelForCausalLM, MarianMTModel, MarianTokenizer, pipeline
 import torch
 import torchaudio
@@ -180,6 +181,47 @@ def generate_response(user_input, session_id):
         logger.error(f"LLM error: {str(e)}", exc_info=True)
         return "Kuchh galat ho gaya. Kripya dobara koshish karein."
 
+def call_model_api(user_input, session_id):
+    user_input_lower = user_input.lower().strip()
+    logger.info(f"Processing user input: {user_input_lower}")
+    
+    url = "http://192.168.0.3:6969/chat"
+    headers = {"Content-Type": "application/json"}
+    data = {"user_question": user_input, "user_id": session_id, "product_name" : "fogger"}
+    
+    try:
+        logger.info(f"Making API call to: {url}")
+        logger.info(f"Request data: {data}")
+        
+        response = requests.post(url, headers=headers, json=data, timeout=30)
+        logger.info(f"API response status: {response.status_code}")
+        
+        if response.status_code == 200:
+            response_data = response.json()
+            logger.info(f"API response data: {response_data}")
+            
+            if "answer" in response_data:
+                return response_data
+            else:
+                logger.error(f"Unexpected response format: {response_data}")
+                return "Unexpected response format from external API"
+        else:
+            logger.error(f"API call failed with status {response.status_code}: {response.text}")
+            return f"External API error: HTTP {response.status_code}"
+            
+    except requests.exceptions.Timeout:
+        logger.error("API call timed out")
+        return "External API request timed out. Please try again."
+    except requests.exceptions.ConnectionError as e:
+        logger.error(f"Connection error to external API: {str(e)}")
+        return "Unable to connect to external API. Please check the connection."
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Request error to external API: {str(e)}")
+        return f"Error communicating with external API: {str(e)}"
+    except Exception as e:
+        logger.error(f"Unexpected error in call_model_api: {str(e)}", exc_info=True)
+        return "An unexpected error occurred while processing your request."
+
 def validate_wav_file(audio_bytes):
     """Validate if the audio bytes represent a valid WAV file."""
     try:
@@ -239,14 +281,27 @@ def speech_to_text(audio_data, audio_format=None, is_base64=False):
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    logger.info("Chat endpoint called")
+    logger.info("=== CHAT ENDPOINT CALLED ===")
+    logger.info(f"Request method: {request.method}")
     logger.info(f"Request content type: {request.content_type}")
-    logger.info(f"Request data: {request.get_data(as_text=True)}")
-
-    data = request.get_json(silent=True)
+    logger.info(f"Request headers: {dict(request.headers)}")
+    
+    # Log raw request data
+    raw_data = request.get_data(as_text=True)
+    logger.info(f"Raw request data: {raw_data}")
+    
+    # Try to parse JSON with better error handling
+    try:
+        data = request.get_json(force=True)
+        logger.info(f"Parsed JSON data: {data}")
+    except Exception as e:
+        logger.error(f"Failed to parse JSON: {str(e)}")
+        logger.error(f"Raw data was: {raw_data}")
+        return jsonify({"response": "Invalid JSON format in request"}), 400
+    
     if not data:
-        logger.error("Invalid or missing JSON data")
-        return jsonify({"response": "Invalid or missing JSON data."}), 400
+        logger.error("Empty or None JSON data received")
+        return jsonify({"response": "Empty JSON data received"}), 400
 
     session_id = data.get("session_id", str(uuid.uuid4()))
     if not session_id:
@@ -262,16 +317,17 @@ def chat():
         except Exception as e:
             logger.error(f"Error in speech_to_text: {str(e)}")
             return jsonify({"response": str(e)}), 400
-    elif "message" in data:
-        user_input = data.get("message", "")
+    elif "user_question" in data:
+        user_input = data.get("user_question", "")
         if not user_input:
-            logger.error("Empty message provided")
+            logger.error("Empty user question provided")
             return jsonify({"response": "Kripya koi message bhejein."}), 400
     else:
         logger.error("Missing audio_data or message")
         return jsonify({"response": "Either 'message' or 'audio_data' is required."}), 400
 
-    response = generate_response(user_input, session_id)
+    response = call_model_api(user_input, session_id)
+    # response = generate_response(user_input, session_id)
     logger.info(f"Response generated: {response}")
     return jsonify({"response": response if isinstance(response, list) else [response]})
 
